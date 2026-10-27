@@ -1,0 +1,7 @@
+mcp[cli]<2
+python-dotenv
+caldav
+icalendar
+pypdf
+python-docx
+openpyxl

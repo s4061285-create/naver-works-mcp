@@ -1,0 +1,14 @@
+# 자격증명 (절대 커밋/배포하지 말 것)
+.env
+
+# 가상환경 / 캐시
+.venv/
+__pycache__/
+*.pyc
+
+# 첨부파일 저장 기본 폴더
+attachments/
+
+# 개인 서명 (signature.example.* 를 복사해서 만든 본인 파일)
+signature.html
+signature.txt

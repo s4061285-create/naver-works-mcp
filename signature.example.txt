@@ -1,0 +1,7 @@
+홍길동 Manager
+OO본부 | OO팀
+
+서울특별시 OO구 OO로 00
+Tel 02-0000-0000
+Mobile +82 010-0000-0000
+Email hong@example.com
