@@ -6,6 +6,10 @@
 > 초기 구조는 [jaykim81/naver-works-mail-mcp](https://github.com/jaykim81/naver-works-mail-mcp)에서
 > 출발했으며, 캘린더·전달·답장 등을 대폭 확장했습니다.
 
+**v2.2 변경사항**: **임시저장**과 **본문 검색**이 추가됐습니다 (메일 21개, 총 31개).
+- `save_draft(subject, body, to="", cc=None, signature=False)` — 발송하지 않고 임시보관함에 저장. 웹/앱에서 열어 수신자·첨부를 보완한 뒤 보낼 때 사용.
+- `search_emails_body(query, limit=5, folder="inbox", scan=100)` — 본문(+제목) 키워드 검색. 네이버웍스 IMAP은 `SEARCH TEXT/BODY`에 항상 빈 결과를 돌려주므로 최근 `scan`건을 `BODY.PEEK[]`로 내려받아 파이썬에서 대조합니다 (읽음 상태 변경 없음).
+
 **v2.1 변경사항**: 메일 **답장(reply)** 기능과 **연락처 검색** 기능이 새로 추가됐습니다.
 - `reply_email(mail_id, body, folder="inbox", reply_all=False, cc=None, include_attachments=False)` 추가
   — 메일 19개 도구 체제로 확장(총 29개).
@@ -123,7 +127,7 @@ MCP 서버입니다. 개발자 콘솔 등록이나 관리자 승인 없이, 네�
 
 | 파일 | 설명 |
 |---|---|
-| `server.py` | MCP 서버 본체 (메일 19개 + 캘린더 10개, 총 29개 도구) |
+| `server.py` | MCP 서버 본체 (메일 21개 + 캘린더 10개, 총 31개 도구) |
 | `requirements.txt` | 필요 패키지 목록 |
 | `.env.example` | 자격증명 입력 템플릿 (`.env`는 포함되어 있지 않습니다 — 각자 발급받아야 함) |
 | `setup.ps1` | 설치 자동화 스크립트 (venv 생성 + 패키지 설치 + `.env` 준비를 한 번에) |
@@ -131,9 +135,9 @@ MCP 서버입니다. 개발자 콘솔 등록이나 관리자 승인 없이, 네�
 | `.gitignore` | `.env`/`.venv`/개인 서명 파일 등을 커밋에서 제외 |
 | `LICENSE` | MIT |
 
-## 제공 도구 (총 29개)
+## 제공 도구 (총 31개)
 
-**메일 (19개)**
+**메일 (21개)**
 
 | 도구 | 설명 |
 |---|---|
@@ -142,9 +146,11 @@ MCP 서버입니다. 개발자 콘솔 등록이나 관리자 승인 없이, 네�
 | `list_emails_from` | 특정 발신자 메일 조회 |
 | `get_email` | 메일 ID로 전체 내용 조회 |
 | `search_emails` | 제목 키워드로 검색 |
+| `search_emails_body` | 본문(+제목) 키워드로 검색 — 네이버웍스 IMAP이 서버 측 본문 검색(TEXT/BODY)을 지원하지 않아 최근 `scan`건(기본 100)을 내려받아 대조, 읽음 상태 변경 없음 |
 | `list_sent_emails` / `list_sent_emails_to` / `search_sent_emails` | 보낸메일함 조회/검색 |
 | `search_contacts` | 이름 일부로 이메일 주소 검색 (받은/보낸메일함 From·To·Cc 헤더 기반, 정식 조직도 API 아님, v2.1 신규) |
 | `list_attachments` / `save_attachment` / `read_attachment` | 첨부파일 목록/저장/텍스트 추출 |
+| `save_draft` | 메일을 발송하지 않고 임시보관함에 저장 (`to`·`cc` 선택, 본문 서식은 `send_email`과 동일) |
 | `send_email` | 메일 발송 (`cc`로 참조자 지정, 본문은 맑은 고딕 14px HTML로 자동 전송) |
 | `forward_email` | 메일 전달 — 원본 발신자/날짜/제목/수신자를 아웃룩 스타일로 인용, 원본 HTML·인라인 이미지·첨부파일까지 그대로 함께 전달 (v2.0 신규) |
 | `reply_email` | 메일 답장/전체회신 — `reply_all`로 발신자만/전체 선택, 아웃룩 스타일 인용 + 원본 HTML·인라인 이미지 보존, `In-Reply-To`/`References`로 스레딩 유지 (v2.1 신규) |
