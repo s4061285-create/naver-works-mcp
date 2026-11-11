@@ -6,13 +6,14 @@ Naver Works(LINE WORKS) 통합 MCP 서버 — 메일(IMAP/SMTP) + 캘린더(CalD
 승인 없이, 네이버웍스 "외부 앱 비밀번호" 하나만으로 동작합니다
 (외부 앱 비밀번호는 IMAP/SMTP뿐 아니라 CalDAV 로그인에도 사용 가능).
 
-제공 도구 (총 29개)
+제공 도구 (총 31개)
 
-[메일 - 19개]
+[메일 - 21개]
 - list_emails                : 받은편지함 최근 메일 조회
 - list_unread_emails         : 읽지 않은 메일만 조회
 - list_emails_from           : 특정 발신자 메일 조회
 - get_email                  : 메일 ID로 특정 메일 전체 내용 조회
+- search_emails_body         : 본문(+제목) 키워드 검색 (최근 N건 내려받아 대조, 서버 본문검색 미지원)
 - search_emails              : 제목 키워드로 메일 검색
 - list_sent_emails           : 보낸메일함 최근 메일 조회
 - list_sent_emails_to        : 보낸메일함에서 특정 수신자에게 보낸 메일 조회
@@ -21,6 +22,7 @@ Naver Works(LINE WORKS) 통합 MCP 서버 — 메일(IMAP/SMTP) + 캘린더(CalD
 - list_attachments           : 메일 첨부파일 목록 조회
 - save_attachment            : 메일 첨부파일을 로컬에 저장
 - read_attachment            : 메일 첨부파일 내용을 텍스트로 추출
+- save_draft                 : 메일을 임시보관함에 저장 (발송 안 함)
 - send_email                 : 메일 발송 (cc로 참조자 지정, attachments로 파일 첨부 가능)
 - forward_email              : 메일 전달 (원본 발신자/날짜/제목/본문을 인용해 포함, 원본 첨부파일도 함께 전달 가능)
 - reply_email                : 메일 답장/전체회신 (reply_all로 발신자만/전체 선택, 원본 인용 포함, In-Reply-To/References로 스레딩 유지)
@@ -58,11 +60,12 @@ import mimetypes
 import os
 import re
 import tempfile
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from email import encoders
 from email.header import decode_header
-from email.utils import parsedate_to_datetime, getaddresses
+from email.utils import parsedate_to_datetime, getaddresses, formatdate
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -580,6 +583,32 @@ def search_emails(query: str, limit: int = 5, folder: str = "inbox") -> list[dic
 
 
 @mcp.tool()
+def search_emails_body(query: str, limit: int = 5, folder: str = "inbox", scan: int = 100) -> list[dict]:
+    """본문(+제목)에 키워드가 포함된 메일을 검색합니다(한글 가능).
+    네이버웍스 IMAP은 서버 측 본문 검색(TEXT/BODY)을 지원하지 않아, 최근 scan건을 내려받아
+    파이썬에서 대조합니다. scan이 클수록 느려집니다(100건에 수 초). 읽음 상태는 바꾸지 않습니다.
+    """
+    mail = _connect_imap(_resolve_mailbox(folder))
+    typ, data = mail.search(None, "ALL")
+    ids = data[0].split()[-scan:] if typ == "OK" and data and data[0] else []
+    needle = query.lower()
+    results = []
+    # 한 통씩 fetch한다. scan이 커서 느려지면 BODY.PEEK[]를 ID 범위로 일괄 fetch하도록 바꿀 것.
+    for mid in reversed(ids):
+        _, resp = mail.fetch(mid, "(BODY.PEEK[])")
+        raw = next((part[1] for part in resp if isinstance(part, tuple)), None)
+        parsed = _parse_message(email.message_from_bytes(raw)) if raw else {}
+        if parsed and (needle in parsed["body"].lower() or needle in parsed["subject"].lower()):
+            parsed["id"] = mid.decode()
+            results.append(parsed)
+            if len(results) >= limit:
+                break
+    mail.close()
+    mail.logout()
+    return results
+
+
+@mcp.tool()
 def list_sent_emails(limit: int = 5) -> list[dict]:
     """보낸메일함에서 최근 메일을 가져옵니다."""
     mail = _connect_imap(_get_sent_folder())
@@ -1091,6 +1120,31 @@ def send_email(
     if attachments:
         result += f" (첨부: {', '.join(Path(p).name for p in attachments)})"
     return result
+
+@mcp.tool()
+def save_draft(subject: str, body: str, to: str = "", cc: Optional[str] = None, signature: bool = False) -> str:
+    """메일을 발송하지 않고 임시보관함에 저장합니다. 본문 서식은 send_email과 같습니다.
+    네이버웍스 웹/앱 임시보관함에서 열어 수신자·첨부를 보완한 뒤 보낼 때 사용합니다.
+    """
+    _require_credentials()
+    msg = MIMEMultipart("alternative")
+    msg.attach(MIMEText(body + ("\n\n" + _get_signature()[1] if signature else ""), "plain", "utf-8"))
+    msg.attach(MIMEText(_build_html_body(body, signature=signature), "html", "utf-8"))
+    msg["From"] = NAVER_EMAIL
+    msg["Subject"] = subject
+    msg["Date"] = formatdate(localtime=True)
+    if to:
+        msg["To"] = to
+    if cc:
+        msg["Cc"] = cc
+
+    folder = _resolve_mailbox("drafts")
+    mail = _connect_imap(folder)
+    typ, resp = mail.append(f'"{folder}"', "\\Draft", imaplib.Time2Internaldate(time.time()), msg.as_bytes())
+    mail.logout()
+    if typ != "OK":
+        return f"❌ 임시저장 실패: {resp}"
+    return f"✅ 임시보관함({folder})에 저장: '{subject}'"
 
 
 def _format_forward_date(date_str: str) -> str:
